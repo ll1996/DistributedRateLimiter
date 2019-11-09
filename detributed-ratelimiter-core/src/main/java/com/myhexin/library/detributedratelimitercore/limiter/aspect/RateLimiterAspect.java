@@ -4,6 +4,7 @@ import com.myhexin.library.detributedratelimitercore.limiter.RateLimiter;
 import com.myhexin.library.detributedratelimitercore.limiter.RateLimiterBuilderFactory;
 import com.myhexin.library.detributedratelimitercore.limiter.annotation.TokenRateLimiter;
 import com.myhexin.library.detributedratelimitercore.limiter.enums.AcquireStrategy;
+import org.apache.commons.lang3.StringUtils;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.Signature;
 import org.aspectj.lang.annotation.Around;
@@ -14,10 +15,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.stereotype.Component;
+
 import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
 
 @Aspect
+@Component
 @EnableAspectJAutoProxy(proxyTargetClass = true)
 public class RateLimiterAspect {
     private static Logger logger = LoggerFactory.getLogger(RateLimiterAspect.class);
@@ -33,9 +37,16 @@ public class RateLimiterAspect {
     public Object around(ProceedingJoinPoint pjp, TokenRateLimiter limiter) throws Throwable {
         Method method = this.resolveMethod(pjp);
 
+        String key = limiter.key();
+        if(StringUtils.isEmpty(key)){
+            key = pjp.getSignature().toLongString();
+        }
+        if (limiter.isBasedIP()) {
+
+        }
         RateLimiter rateLimiter = rateLimiterBuilderFactory
                 .newInstance()
-                .setKey(limiter.key())
+                .setKey(key)
                 .setMaxBurstSeconds(limiter.maxBurstSeconds())
                 .setPermitsPerSecond(limiter.permitsPerSecond())
                 .build();
@@ -47,26 +58,27 @@ public class RateLimiterAspect {
             isAcquire = rateLimiter.tryAcquire(limiter.consume(),limiter.timeout(),TimeUnit.SECONDS);
         }
         if(isAcquire){
+            logger.info("1");
             return pjp.proceed();
         }
-
-        if (!limiter.fallBackMethod().isEmpty()) {
-            return null;
+        if (limiter.fallBackMethod().isEmpty()) {
+            return "current access is limited, please wait and refresh";
         }
         Class<?> clazz = limiter.fallBackClass();
         if (clazz.equals(Void.class)) {
             clazz = pjp.getTarget().getClass();
         }
         Object o = clazz.newInstance();
-        Method m = clazz.getMethod(limiter.fallBackMethod());
+        Method m = clazz.getDeclaredMethod(limiter.fallBackMethod());
+        m.setAccessible(true);
         Object invoke = m.invoke(o);
+        return invoke;
 
-
-        Signature sig = pjp.getSignature();
-        if (!(sig instanceof MethodSignature)) {
-            throw new IllegalArgumentException("This annotation can only be used in methods.");
-        }
-        return null;
+//        Signature sig = pjp.getSignature();
+//        if (!(sig instanceof MethodSignature)) {
+//            throw new IllegalArgumentException("This annotation can only be used in methods.");
+//        }
+//        return null;
 
     }
 
