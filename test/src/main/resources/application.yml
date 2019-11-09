@@ -1,0 +1,11 @@
+spring:
+  redis:
+    host: 47.95.222.174
+    port: 6379
+    password: 123456
+  mvc:
+    static-path-pattern: /**
+server:
+  port: 8080
+  servlet:
+    context-path: /test
